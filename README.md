@@ -66,7 +66,7 @@ flowchart TD
 
 ---
 
-## 💡 How It Works (In Simple Terms)
+## 💡 How It Works 
 
 1. **The Single Front Door (NGINX on port 8080):**  
    Your browser only ever talks to port `8080`. NGINX acts like a receptionist—when you want to view the page, it hands you the HTML. When you click "Sign Up" or browse products, NGINX quietly forwards your request to the right backend service behind the scenes. This keeps the backend secure and prevents browser errors.
