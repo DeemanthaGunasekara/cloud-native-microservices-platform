@@ -19,7 +19,7 @@ flowchart TD
         end
 
         subgraph FrontendTier["Static Asset Serving"]
-            StaticFiles["🎨 Storefront UI Files\n(/usr/share/nginx/html)\nindex.html | style.css | app.js"]
+            StaticFiles["🎨 Storefront Dashboard\n(/usr/share/nginx/html)\nindex.html | style.css | app.js"]
         end
 
         subgraph MicroservicesTier["Backend Application Services"]
@@ -68,7 +68,7 @@ flowchart TD
 ### 🔍 Architectural Highlights & Request Lifecycle Breakdown
 
 1. **Single Entry Point (No CORS Issues):**  
-   The browser only ever communicates with **`http://localhost:8080`**. It never directly addresses the backend ports (`3000`, `3001`). NGINX acts as a reverse proxy, dispatching requests internally across the private Docker network based on URL prefixes. This eliminates browser Cross-Origin Resource Sharing (CORS) security restrictions.
+   The browser only ever communicates with **`http://localhost:8080`**. It never directly addresses the backend ports (`3000`, `3001`). NGINX acts as an edge reverse proxy, dispatching requests internally across the private Docker network based on URL path prefixes (`/api/v1/auth`, `/api/v1/users`, `/api/v1/products`). This completely eliminates browser Cross-Origin Resource Sharing (CORS) security restrictions.
 
 2. **Docker Internal DNS Resolution:**  
    Services communicate using container service names (`user-service`, `product-service`, `postgres`, `prometheus`), never hardcoded IP addresses. Docker's built-in DNS resolves these names dynamically.
@@ -85,24 +85,12 @@ flowchart TD
 
 | Component | Container Name | Technology Stack | Container Port | Host Port | Role & Function |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Frontend** | `frontend-dashboard` | HTML5, CSS3, Vanilla JS, NGINX Alpine | `80` | `8080` | Edge reverse proxy & warm-minimalist storefront UI |
+| **Frontend** | `frontend-dashboard` | HTML5, CSS3, Vanilla JS, NGINX Alpine | `80` | `8080` | Edge reverse proxy & storefront UI |
 | **User Service** | `user-service` | Node.js 20, Express, bcryptjs, JWT | `3000` | `3000` | User registration, authentication, & password encryption |
 | **Product Service** | `product-service` | Node.js 20, Express, Fetch API, Cache | `3001` | `3001` | Live 100+ product marketplace catalog with fallback |
 | **Database** | `postgres-db` | PostgreSQL 16 Alpine | `5432` | `5432` | Relational database with persistent volume `postgres_data` |
 | **Prometheus** | `prometheus` | Prometheus v2.51.0 | `9090` | `9090` | Pull-based time-series metrics collection (`/metrics`) |
 | **Grafana** | `grafana` | Grafana 10.4.0 | `3000` | `3002` | Runtime observability dashboards (Login: `admin`/`admin`) |
-
----
-
-## 🎨 Interactive Storefront & Figma Design
-
-The storefront was implemented from an approved design prototype:
-* **Figma Prototype:** [View Interactive Figma Design File](https://www.figma.com/design/kRuLq69u2qHeGSwwy1kitA)
-* **Warm Minimalist Palette:** Built with clean CSS custom properties (`--primary-accent: #c85a32`, warm sand backgrounds, elevated card surfaces).
-* **100+ Live Marketplace Feed:** Dynamic multi-category catalog across smartphones, laptops, electronics, automotive, watches, and home essentials.
-* **Instant Client Filtering:** Zero-latency category pill selection and real-time title/description keyword search.
-* **In-Browser PostgreSQL Registration:** Interactive Sign-Up modal writing bcrypt-hashed user credentials directly to PostgreSQL.
-* **Live Database Table Viewer:** Built-in modal viewer to inspect live PostgreSQL `users_db.users` records.
 
 ---
 
