@@ -4,68 +4,100 @@ A modern, enterprise-grade cloud-native microservices application built with **N
 
 ---
 
-## 🏛️ System Architecture
+## 🏛️ Comprehensive System Architecture & Network Topology
 
 ```mermaid
 flowchart TD
-    subgraph Client["Public Access (Port 80 / 8080)"]
-        Browser["🌐 Web Browser"]
+    subgraph Client["Public Ingress (Host Machine)"]
+        Browser["🌐 User Web Browser\n(http://localhost:8080)"]
     end
 
-    subgraph Kubernetes["Kubernetes Cluster / Local Orchestration"]
-        Ingress["🚦 NGINX Reverse Proxy & Ingress\n(http://localhost:8080)"]
-
-        subgraph FrontendGroup["Frontend Tier"]
-            Frontend["🎨 Storefront Dashboard\n(HTML5 / CSS3 / Vanilla JS - Port 80)"]
+    subgraph DockerNetwork["Internal Docker Bridge Network (microservices-webapp_default)"]
+        
+        subgraph GatewayTier["Edge Gateway & Reverse Proxy"]
+            Nginx["🚦 NGINX Reverse Proxy\n(frontend-dashboard:80)\nHost Port: 8080:80"]
         end
 
-        subgraph BackendGroup["Backend Microservices Tier"]
-            UserService["👤 User Service\n(Node.js / Express - Port 3000)"]
-            ProductService["📦 Product Service\n(Node.js / Express - Port 3001)"]
+        subgraph FrontendTier["Static Asset Serving"]
+            StaticFiles["🎨 Storefront UI Files\n(/usr/share/nginx/html)\nindex.html | style.css | app.js"]
         end
 
-        subgraph DatabaseGroup["Persistence Tier"]
-            Postgres["🐘 PostgreSQL Database\n(users_db / products_db - Port 5432)"]
+        subgraph MicroservicesTier["Backend Application Services"]
+            UserService["👤 User Service (user-service:3000)\n• Port: 3000:3000\n• Express.js REST API\n• Bcrypt Hashing & JWT Auth"]
+            ProductService["📦 Product Service (product-service:3001)\n• Port: 3001:3001\n• Express.js REST API\n• 5-min In-Memory Cache"]
         end
 
-        subgraph MonitoringGroup["Observability & Metrics Tier"]
-            Prometheus["📊 Prometheus Server\n(Scrapes :3000/metrics & :3001/metrics - Port 9090)"]
-            Grafana["📈 Grafana Dashboard\n(Port 3002)"]
+        subgraph DatabaseTier["Data Persistence Layer"]
+            Postgres["🐘 PostgreSQL 16 DB (postgres-db:5432)\n• Port: 5432:5432\n• Databases: users_db & products_db\n• Healthcheck: pg_isready"]
+            Volume[("💾 Named Volume\npostgres_data ➔ /var/lib/postgresql/data")]
+        end
+
+        subgraph ObservabilityTier["Monitoring & Metrics Layer"]
+            Prometheus["📊 Prometheus Server (prometheus:9090)\n• Port: 9090:9090\n• Scrapes /metrics every 5s"]
+            Grafana["📈 Grafana Dashboard (grafana:3000)\n• Host Port: 3002:3000\n• Queries: http://prometheus:9090"]
         end
     end
 
-    Browser -->|HTTP Requests| Ingress
-    Ingress -->|Path: / | Frontend
-    Ingress -->|Path: /api/v1/auth & /api/v1/users| UserService
-    Ingress -->|Path: /api/v1/products| ProductService
+    subgraph ExternalWeb["External World"]
+        DummyJSON["☁️ DummyJSON REST API\n(https://dummyjson.com/products?limit=100)"]
+    end
 
-    Frontend -.->|Client API Calls| Ingress
+    %% Client Traffic Flow
+    Browser -->|HTTP Traffic :8080| Nginx
 
-    UserService -->|Bcrypt Hashed Users| Postgres
-    Prometheus -->|Scrapes Metrics| UserService
-    Prometheus -->|Scrapes Metrics| ProductService
-    Grafana -->|Queries Metrics| Prometheus
+    %% Reverse Proxy Path Routing
+    Nginx -->|Route: / | StaticFiles
+    Nginx -->|Route: /api/v1/auth & /api/v1/users| UserService
+    Nginx -->|Route: /api/v1/products| ProductService
+
+    %% Microservice to Database Communication
+    UserService -->|SQL Queries over DNS: postgres:5432| Postgres
+    Postgres -.->|Persists data to disk| Volume
+
+    %% Product Service to External API
+    ProductService -->|Fetches 100+ Live Items| DummyJSON
+
+    %% Observability Scraping
+    Prometheus -->|Scrapes :3000/metrics| UserService
+    Prometheus -->|Scrapes :3001/metrics| ProductService
+    Grafana -->|Queries Metrics over DNS: prometheus:9090| Prometheus
 ```
 
 ---
 
-## 📦 Microservices & Components
+### 🔍 Architectural Highlights & Request Lifecycle Breakdown
 
-| Component | Technology | Internal Port | External Route / Port | Purpose |
-| :--- | :--- | :--- | :--- | :--- |
-| **Frontend** | HTML5, CSS3, Vanilla JS, NGINX Alpine | `80` | `http://localhost:8080` | Warm minimalist storefront with real-time search, filters, & cart |
-| **User Service** | Node.js, Express, bcryptjs, JWT | `3000` | `http://localhost:3000` | Manages authentication, registration, and user data |
-| **Product Service** | Node.js, Express, Fetch API | `3001` | `http://localhost:3001` | Streams 100+ live multi-department marketplace catalog with caching |
-| **PostgreSQL** | PostgreSQL 16 Alpine | `5432` | `localhost:5432` | Relational database with persistent storage volume (`postgres_data`) |
-| **Prometheus** | Prometheus v2.51.0 | `9090` | `http://localhost:9090` | Cloud-native metric scraper collecting runtime performance data |
-| **Grafana** | Grafana 10.4.0 | `3000` | `http://localhost:3002` | Real-time visualization dashboard (Login: `admin` / `admin`) |
+1. **Single Entry Point (No CORS Issues):**  
+   The browser only ever communicates with **`http://localhost:8080`**. It never directly addresses the backend ports (`3000`, `3001`). NGINX acts as a reverse proxy, dispatching requests internally across the private Docker network based on URL prefixes. This eliminates browser Cross-Origin Resource Sharing (CORS) security restrictions.
+
+2. **Docker Internal DNS Resolution:**  
+   Services communicate using container service names (`user-service`, `product-service`, `postgres`, `prometheus`), never hardcoded IP addresses. Docker's built-in DNS resolves these names dynamically.
+
+3. **Stateless Compute & Stateful Persistence:**  
+   The Node.js and NGINX containers are completely stateless and can be destroyed or scaled instantly. The PostgreSQL container delegates all storage to a persistent named volume (`postgres_data`), ensuring user records survive container updates and system reboots.
+
+4. **Multi-Stage Resilient Catalog:**  
+   Product Service streams live items from DummyJSON, stores them in an in-memory cache for 5 minutes (`TTL = 300s`) to avoid rate limits, and automatically falls back to an embedded offline catalog if the external API becomes unreachable.
+
+---
+
+## 📦 Microservices & Components Inventory
+
+| Component | Container Name | Technology Stack | Container Port | Host Port | Role & Function |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Frontend** | `frontend-dashboard` | HTML5, CSS3, Vanilla JS, NGINX Alpine | `80` | `8080` | Edge reverse proxy & warm-minimalist storefront UI |
+| **User Service** | `user-service` | Node.js 20, Express, bcryptjs, JWT | `3000` | `3000` | User registration, authentication, & password encryption |
+| **Product Service** | `product-service` | Node.js 20, Express, Fetch API, Cache | `3001` | `3001` | Live 100+ product marketplace catalog with fallback |
+| **Database** | `postgres-db` | PostgreSQL 16 Alpine | `5432` | `5432` | Relational database with persistent volume `postgres_data` |
+| **Prometheus** | `prometheus` | Prometheus v2.51.0 | `9090` | `9090` | Pull-based time-series metrics collection (`/metrics`) |
+| **Grafana** | `grafana` | Grafana 10.4.0 | `3000` | `3002` | Runtime observability dashboards (Login: `admin`/`admin`) |
 
 ---
 
 ## 🎨 Interactive Storefront & Figma Design
 
-The storefront is designed from an approved, user-tested prototype:
-* **Figma Prototype:** [View Interactive Figma Design](https://www.figma.com/design/kRuLq69u2qHeGSwwy1kitA)
+The storefront was implemented from an approved design prototype:
+* **Figma Prototype:** [View Interactive Figma Design File](https://www.figma.com/design/kRuLq69u2qHeGSwwy1kitA)
 * **Warm Minimalist Palette:** Built with clean CSS custom properties (`--primary-accent: #c85a32`, warm sand backgrounds, elevated card surfaces).
 * **100+ Live Marketplace Feed:** Dynamic multi-category catalog across smartphones, laptops, electronics, automotive, watches, and home essentials.
 * **Instant Client Filtering:** Zero-latency category pill selection and real-time title/description keyword search.
