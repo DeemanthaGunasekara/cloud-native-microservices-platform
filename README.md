@@ -1,6 +1,6 @@
-# 🚀 Cloud-Native Microservices Learning Project
+# 🚀 Cloud-Native Microservices Web Application & CI/CD Pipeline
 
-A hands-on engineering project built to understand how modern cloud applications work under the hood. It takes a complete web application and breaks it down into independent, containerized services using **Docker**, **Docker Compose**, **Kubernetes**, **PostgreSQL**, and **Prometheus & Grafana**.
+A modern, enterprise-grade cloud-native microservices application built with **Node.js/Express** and **PostgreSQL**, containerized with **Docker**, orchestrated locally via **Docker Compose**, deployed on **Kubernetes** using **Helm**, monitored with **Prometheus & Grafana**, and automated end-to-end with **GitHub Actions CI/CD** publishing to **GitHub Container Registry (GHCR)**.
 
 ---
 
@@ -8,82 +8,82 @@ A hands-on engineering project built to understand how modern cloud applications
 
 ```mermaid
 flowchart TD
-    subgraph Client["Public Access (Your Computer)"]
+    subgraph Client["Public Access (Host Machine)"]
         Browser["🌐 Web Browser\n(http://localhost:8080)"]
     end
 
-    subgraph DockerNetwork["Internal Private Network (Docker)"]
+    subgraph DockerNetwork["Internal Docker Bridge Network (microservices-webapp_default)"]
         
-        subgraph GatewayTier["The Front Door (Only Public Entry)"]
-            Nginx["🚦 NGINX Reverse Proxy\n(Port 8080 ➔ 80)"]
+        subgraph GatewayTier["Edge Gateway & Reverse Proxy (Public Entry)"]
+            Nginx["🚦 NGINX Reverse Proxy\n(frontend-dashboard:80)\nHost Port: 8080:80"]
         end
 
-        subgraph FrontendTier["Website Files"]
-            StaticFiles["🎨 Storefront Dashboard\n(HTML, CSS & JavaScript)"]
+        subgraph FrontendTier["Frontend Static Assets"]
+            StaticFiles["🎨 Storefront Dashboard\n(/usr/share/nginx/html)\nindex.html | style.css | app.js"]
         end
 
-        subgraph MicroservicesTier["Backend Services (Private)"]
-            UserService["👤 User Service (Port 3000)\nHandles accounts & secure passwords"]
-            ProductService["📦 Product Service (Port 3001)\nHandles product catalog & caching"]
+        subgraph MicroservicesTier["Backend Application Services (Private)"]
+            UserService["👤 User Service (user-service:3000)\n• Express.js REST API\n• Bcrypt Hashing & JWT Auth"]
+            ProductService["📦 Product Service (product-service:3001)\n• Express.js REST API\n• 5-min In-Memory Cache"]
         end
 
-        subgraph DatabaseTier["Data Storage (Private)"]
-            Postgres["🐘 PostgreSQL Database (Port 5432)\nStores user accounts"]
-            Volume[("💾 Persistent Disk Volume\nSaves data even if container stops")]
+        subgraph DatabaseTier["Data Persistence Layer (Private)"]
+            Postgres["🐘 PostgreSQL 16 DB (postgres-db:5432)\n• Databases: users_db & products_db\n• Healthcheck: pg_isready"]
+            Volume[("💾 Persistent Named Volume\npostgres_data ➔ /var/lib/postgresql/data")]
         end
 
-        subgraph ObservabilityTier["Monitoring Tools"]
-            Prometheus["📊 Prometheus (Port 9090)\nCollects health & performance numbers"]
-            Grafana["📈 Grafana Dashboard (Port 3002)\nDraws live visual charts"]
+        subgraph ObservabilityTier["Monitoring & Metrics Layer"]
+            Prometheus["📊 Prometheus Server (prometheus:9090)\n• Scrapes :3000/metrics & :3001/metrics"]
+            Grafana["📈 Grafana Dashboard (grafana:3000)\n• Host Port: 3002:3000\n• Queries: http://prometheus:9090"]
         end
     end
 
-    subgraph ExternalWeb["Outside Internet"]
-        DummyJSON["☁️ DummyJSON Cloud API\n(Live 100+ Product Feed)"]
+    subgraph ExternalWeb["External Internet Feed"]
+        DummyJSON["☁️ DummyJSON REST API\n(https://dummyjson.com/products?limit=100)"]
     end
 
-    %% Inbound traffic
-    Browser ==>|Enters through Port 8080 ONLY| Nginx
+    %% Inbound Traffic Flow
+    Browser ==>|HTTP Requests on Port :8080| Nginx
 
-    %% Internal routing
-    Nginx -->|Loads website files| StaticFiles
-    Nginx -->|Routes /api/v1/auth & /api/v1/users| UserService
-    Nginx -->|Routes /api/v1/products| ProductService
+    %% Reverse Proxy Path Routing
+    Nginx -->|Route: / | StaticFiles
+    Nginx -->|Route: /api/v1/auth & /api/v1/users| UserService
+    Nginx -->|Route: /api/v1/products| ProductService
 
-    %% Database saving
-    UserService -->|Saves hashed user data| Postgres
-    Postgres -.->|Writes permanently to disk| Volume
+    %% Microservice to Database Communication
+    UserService -->|SQL Queries over DNS: postgres:5432| Postgres
+    Postgres -.->|Persists data to disk volume| Volume
 
-    %% Live internet data pull
-    ProductService -.->|1. Requests live items| DummyJSON
-    DummyJSON ==>|2. Streams 100+ products back| ProductService
+    %% External Data Ingestion
+    ProductService -.->|1. HTTP GET Request| DummyJSON
+    DummyJSON ==>|2. Streams 100+ Live Products back| ProductService
 
-    %% Monitoring
-    Prometheus -->|Scrapes metrics| UserService
-    Prometheus -->|Scrapes metrics| ProductService
-    Grafana -->|Reads data from Prometheus| Prometheus
+    %% Observability Scraping
+    Prometheus -->|Scrapes :3000/metrics| UserService
+    Prometheus -->|Scrapes :3001/metrics| ProductService
+    Grafana -->|Queries Metrics over DNS: prometheus:9090| Prometheus
 ```
 
 ---
 
-## 💡 How It Works 
+## 💡 How It Works
 
-1. **The Single Front Door (NGINX on port 8080):**  
-   Your browser only ever talks to port `8080`. NGINX acts like a receptionist—when you want to view the page, it hands you the HTML. When you click "Sign Up" or browse products, NGINX quietly forwards your request to the right backend service behind the scenes. This keeps the backend secure and prevents browser errors.
+1. **Edge Reverse Proxy & Routing (NGINX on port 8080):**  
+   All client browser traffic enters through port `8080`. NGINX serves the compiled static frontend files for root paths (`/`) and acts as a reverse proxy for API routes (`/api/v1/auth`, `/api/v1/users`, `/api/v1/products`), forwarding requests to the appropriate backend containers across the private Docker network without triggering browser CORS restrictions.
 
-2. **Independent Microservices:**  
-   Instead of one giant program, the work is split into two specialized services:
-   * **User Service:** Encrypts passwords and creates accounts.
-   * **Product Service:** Pulls live products and keeps them in memory for fast browsing.
+2. **Decoupled Backend Microservices:**  
+   The backend logic is divided into two independent Node.js/Express services:
+   * **User Service (`port 3000`):** Manages user registration, JWT authentication, and bcrypt password hashing.
+   * **Product Service (`port 3001`):** Serves the product catalog, implements in-memory caching, and handles search/category filtering.
 
-3. **Safe Storage (PostgreSQL & Volumes):**  
-   Normally, when a Docker container is deleted, everything inside it disappears. We attached a **Docker Volume** (a permanent folder on your hard drive) to PostgreSQL, so your registered users are never lost.
+3. **Data Persistence with Docker Volumes (PostgreSQL):**  
+   PostgreSQL 16 runs in an isolated container storing relational data in `users_db`. To prevent data loss when containers restart or upgrade, database files are mounted to a persistent Docker named volume (`postgres_data ➔ /var/lib/postgresql/data`).
 
-4. **Live Internet Feed:**  
-   Product Service reaches out to the internet to download 100+ real marketplace items from DummyJSON, giving you a full Amazon/eBay-style catalog.
+4. **External API Ingestion & Resilient Caching:**  
+   Product Service queries the external DummyJSON REST API to retrieve 100+ live products. Responses are stored in an in-memory cache with a 5-minute TTL to minimize external network latency and rate limits, with an embedded local backup catalog for offline resilience.
 
-5. **Live Monitoring (Prometheus & Grafana):**  
-   Prometheus automatically asks each service *"Are you healthy?"* every 5 seconds. Grafana turns those answers into real-time graphs.
+5. **Automated Health Probes & Monitoring:**  
+   Both backend services expose `/healthz` endpoints checked by Kubernetes `readinessProbe` and `livenessProbe` to ensure zero-downtime updates and self-healing. Prometheus scrapes `/metrics` endpoints every 5 seconds, and Grafana visualizes runtime performance metrics on port `3002`.
 
 ---
 
@@ -100,38 +100,89 @@ flowchart TD
 
 ---
 
-## 🚀 How to Run It
+## 🚀 How to Run & Access the Project
 
-All 6 services start up together with a single command:
+### Option 1: Run with Docker Compose (Local Development)
+
+Start the entire 6-container microservices stack in one command:
 
 ```bash
-# Start everything in the background
 docker compose up -d --build
 ```
 
-### Open in your browser:
-* **The Storefront Website:** [http://localhost:8080](http://localhost:8080)
-* **Prometheus Metrics:** [http://localhost:9090](http://localhost:9090)
-* **Grafana Charts:** [http://localhost:3002](http://localhost:3002) *(Login: `admin` / `admin`)*
+#### Access Endpoints & URLs:
+* **Storefront Dashboard:** [http://localhost:8080](http://localhost:8080)
+* **User Service API:** [http://localhost:3000/api/v1/users](http://localhost:3000/api/v1/users)
+* **User Service Health Probe:** [http://localhost:3000/healthz](http://localhost:3000/healthz)
+* **Product Service API:** [http://localhost:3001/api/v1/products](http://localhost:3001/api/v1/products)
+* **Product Service Health Probe:** [http://localhost:3001/healthz](http://localhost:3001/healthz)
+* **Prometheus Targets & Scraper:** [http://localhost:9090/targets](http://localhost:9090/targets)
+* **Grafana Live Dashboards:** [http://localhost:3002](http://localhost:3002) *(Login: `admin` / `admin`)*
 
-### To stop everything:
+To stop all containers:
 ```bash
 docker compose down
 ```
 
 ---
 
+### Option 2: Deploy with Helm (Kubernetes Package Manager)
+
+Deploy or upgrade the entire microservices stack in Kubernetes with a single command:
+
+```bash
+# Deploy or upgrade the Helm chart in the microservices-app namespace
+helm upgrade --install microservices-app ./helm/microservices-app \
+  --namespace microservices-app \
+  --create-namespace
+```
+
+#### Inspect Deployed Resources:
+```bash
+kubectl get all,ingress -n microservices-app
+```
+
+#### To Uninstall:
+```bash
+helm uninstall microservices-app -n microservices-app
+```
+
+---
+
+### Option 3: Deploy with Raw Kubernetes Manifests
+
+```bash
+# 1. Create the Dedicated Namespace
+kubectl apply -f k8s/namespace.yaml
+
+# 2. Deploy Services, Deployments, PVCs, and Ingress
+kubectl apply -f k8s/
+```
+
+#### Verify Running Pods:
+```bash
+kubectl get pods -n microservices-app
+```
+
+#### Access Endpoints via NGINX Ingress:
+* **Storefront Dashboard:** [http://localhost/](http://localhost/)
+* **Users API:** [http://localhost/api/v1/users](http://localhost/api/v1/users)
+* **Products API:** [http://localhost/api/v1/products](http://localhost/api/v1/products)
+
+---
+
 ## 🎓 Core Cloud Concepts Learned in this Project
 
-* **Docker & Containers:** Packaging code and its exact environment so it runs identically on any computer.
-* **Multi-Service Networking:** Connecting multiple isolated containers on a private network using service names instead of IP addresses.
-* **Reverse Proxying:** Using NGINX as an API Gateway to hide internal services and stop CORS errors.
-* **Data Persistence:** Using Docker Volumes so database records survive container restarts.
-* **Kubernetes (`k8s/`) & Helm:** Preparing production manifests to deploy and auto-scale containers across a cloud cluster.
-* **CI/CD Automation:** Using GitHub Actions to automatically run tests and publish Docker images on every commit.
+* **Docker & Containers:** Packaging applications with isolated dependencies and non-root Alpine runtimes.
+* **Multi-Service Networking:** Connecting microservices over private bridge networks using internal DNS resolution.
+* **Reverse Proxying & Gateways:** Routing path-based traffic through NGINX to eliminate CORS and hide internal microservices.
+* **Stateful Persistence:** Decoupling persistent database storage using Docker Volumes and Kubernetes PVCs.
+* **Kubernetes Health Probes:** Configuring `livenessProbe` and `readinessProbe` for automated zero-downtime updates and self-healing.
+* **Helm Packaging:** Managing parameterized multi-environment deployments via centralized `values.yaml` configurations.
+* **CI/CD Automation:** Building, testing, and publishing production container images to GHCR using GitHub Actions.
 
 ---
 
 ## 👨‍💻 Author
 **Deemantha Gunasekara**  
-*Cloud & DevOps Learning Journey*
+*Cloud & DevOps Engineering Project*
