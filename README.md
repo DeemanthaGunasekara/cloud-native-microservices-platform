@@ -110,14 +110,13 @@ Start the entire 6-container microservices stack in one command:
 docker compose up -d --build
 ```
 
-#### Access Endpoints & URLs:
-* **Storefront Dashboard:** [http://localhost:8080](http://localhost:8080)
-* **User Service API:** [http://localhost:3000/api/v1/users](http://localhost:3000/api/v1/users)
-* **User Service Health Probe:** [http://localhost:3000/healthz](http://localhost:3000/healthz)
-* **Product Service API:** [http://localhost:3001/api/v1/products](http://localhost:3001/api/v1/products)
-* **Product Service Health Probe:** [http://localhost:3001/healthz](http://localhost:3001/healthz)
-* **Prometheus Targets & Scraper:** [http://localhost:9090/targets](http://localhost:9090/targets)
-* **Grafana Live Dashboards:** [http://localhost:3002](http://localhost:3002) *(Login: `admin` / `admin`)*
+#### Access Endpoints & URLs (6 Core Containers):
+* **Frontend Storefront (`frontend-dashboard`):** [http://localhost:8080](http://localhost:8080)
+* **User Service (`user-service`):** [http://localhost:3000](http://localhost:3000)
+* **Product Service (`product-service`):** [http://localhost:3001](http://localhost:3001)
+* **PostgreSQL Database (`postgres-db`):** `localhost:5432`
+* **Prometheus Server (`prometheus`):** [http://localhost:9090](http://localhost:9090)
+* **Grafana Dashboards (`grafana`):** [http://localhost:3002](http://localhost:3002) *(Login: `admin` / `admin`)*
 
 To stop all containers:
 ```bash
